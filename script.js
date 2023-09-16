@@ -10,34 +10,34 @@ function init() {
     var canvas = document.getElementById("mycanvas");
     var ctx = canvas.getContext("2d");
 
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.beginPath();
+
     var pixelWidth = canvas.width / gridWidth;
     var pixelHeight = canvas.height / gridHeight;
     for (var i = 1; i < gridWidth; i++) {
       var x = pixelWidth * i;
       ctx.moveTo(x, 0);
       ctx.lineTo(x, canvas.height);
-      ctx.stroke();
     }
 
     for (var j = 1; j < gridHeight; j++) {
       var y = pixelHeight * j;
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
-      ctx.stroke();
     }
-  }
 
-  function drawPixel(i, j) {
-    var canvas = document.getElementById("mycanvas");
-    var ctx = canvas.getContext("2d");
-    var pixelWidth = canvas.width / gridWidth;
-    var pixelHeight = canvas.height / gridHeight;
-    var x = (canvas.width / gridWidth) * i;
-    var y = (canvas.height / gridHeight) * j;
-    if (pixels[j * gridHeight + i]) {
-      ctx.fillRect(x, y, pixelWidth, pixelHeight);
-    } else {
-      ctx.clearRect(x, y, pixelWidth, pixelHeight);
+    ctx.stroke();
+
+    for (var i = 1; i < gridWidth; i++) {
+      for (var j = 1; j < gridHeight; j++) {
+        if (pixels[j * gridHeight + i]) {
+          var x = (canvas.width / gridWidth) * i;
+          var y = (canvas.height / gridHeight) * j;
+          ctx.fillRect(x, y, pixelWidth, pixelHeight);
+        }
+      }
     }
   }
 
@@ -56,8 +56,8 @@ function init() {
     let x = update.payload.x;
     let y = update.payload.y;
     pixels[y * gridHeight + x] = update.payload.enabled;
-    drawPixel(x, y);
     if (update.serial === update.max_serial) {
+      draw();
       beep(300);
     }
   });
