@@ -30,8 +30,8 @@ function init() {
 
     ctx.stroke();
 
-    for (var i = 1; i < gridWidth; i++) {
-      for (var j = 1; j < gridHeight; j++) {
+    for (var i = 0; i < gridWidth; i++) {
+      for (var j = 0; j < gridHeight; j++) {
         if (pixels[j * gridHeight + i]) {
           var x = (canvas.width / gridWidth) * i;
           var y = (canvas.height / gridHeight) * j;
