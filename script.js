@@ -9,14 +9,19 @@ let size = gridWidth * gridHeight;
 // they are also conveniently initialized with zeros
 var pixels = new Uint8Array(size);
 
-// 'recency' tracks the largest known sequence number for each pixel
-// at an offset corresponding to the 'pixels' array
-// Uint16 gives us up to 65535 updates, which is probably enough
-// this can always be converted to a Uint32Array during runtime
-// or even an array of BigInts if we really want to prove 'correctness'
-let recency = new Uint16Array(size);
+// an implementation of Lamport Timestamps
+// (https://en.wikipedia.org/wiki/Lamport_timestamp)
+// lets us determine if one update is known to have
+// happened before another, or if they are concurrent
 
-let largestKnownSequence = 0;
+// 'recency' tracks the largest known sequence number for each pixel
+// at an offset corresponding to that of the 'pixels' array
+// a Uint32Array lets us track more than 4 Billion updates
+let recency = new Uint32Array(size);
+
+// this will be updated to the greatest Lamport timestamp
+// which we have observed,
+let mostRecentLogicalTime = 0;
 
 function init() {
   function draw() {
@@ -64,36 +69,53 @@ function init() {
     oscillator.stop(context.currentTime + 0.1);
   }
 
-  function setPixel (offset, value, sequence) {
+  function setPixel (offset, value, seqnum) {
     // update recency:
-    recency[offset] = sequence;
+    recency[offset] = seqnum;
     // and update the value
     pixels[offset] = value;
-  };
+  }
+
+  function getOffset (x, y) {
+    return y * gridHeight + x;
+  }
+
+  function isPositiveInteger (n) {
+    return Number.isInteger(n) && n > 0;
+  }
 
   window.webxdc.setUpdateListener(function (update) {
     console.log(update);
     let {
       x,
       y,
-      sequence,
+      seqnum,
       enabled,
     } = update.payload;
 
-    largestKnownSequence = Math.max(sequence, largestKnownSequence);
+    // incoming Lamport timestamps should always be positive integers.
+    // ignoring non-comforming updates makes that a guarantee.
+    if (!isPositiveInteger(seqnum)) { return; }
 
-    let offset = y * gridHeight + x;
-    let currentSequence = recency[offset];
-    if (currentSequence < sequence) {
+    // we can afford not to validate other update values
+    // because TypedArrays restrict the possible values
+    // and out-of-bounds updates make no practical difference
+
+    // update the global timestamp if the incoming value is greater
+    mostRecentLogicalTime = Math.max(seqnum, mostRecentLogicalTime);
+
+    let offset = getOffset(x, y);
+    let currentPixelTime = recency[offset];
+    if (currentPixelTime < seqnum) {
       // the update is newer than the currently set pixel value
       // apply it and update its sequence number
-      setPixel(offset, enabled, sequence);
-    } else if (currentSequence === sequence) {
+      setPixel(offset, enabled, seqnum);
+    } else if (currentPixelTime === seqnum) {
       // if the incoming value has the same sequence number
-      // as the currently set value, then we consider them concurrent
+      // as the currently set value, then we consider them concurrent.
       // ensure convergence with an arbitrary but deterministic tie-breaker
       // taking the larger of the two values is sufficient for integers
-      setPixel(offset, Math.max(pixels[offset], enabled), sequence);
+      setPixel(offset, Math.max(pixels[offset], enabled), seqnum);
     } else {
       // if the incoming update has a lower sequence number
       // than the current state for this pixel, ignore it
@@ -115,21 +137,24 @@ function init() {
     var gridYPos = Math.floor(
       ((event.clientY - rect.top) / rect.height) * gridHeight
     );
+    var offset = getOffset(gridXPos, gridYPos);
+
+    // serializing updates as numbers is marginally more efficient than booleans.
+    // coercing the number from a boolean ensures it is either 0 or 1
+    var value = Number(!pixels[offset]);
 
     // when sending an update we include a sequence number
-    // that is one greater than the largest sequence we have seen.
+    // that is one greater than the largest we have seen.
     // this provides peers with enough information about our
     // local state to interpret updates in a globally consistent way
-    let newSequence = largestKnownSequence = largestKnownSequence + 1;
+    let newLamportTimestamp = mostRecentLogicalTime = mostRecentLogicalTime + 1;
     window.webxdc.sendUpdate(
       {
         payload: {
           x: gridXPos,
           y: gridYPos,
-          // serializing updates as a number is marginally more efficient than a boolean
-          // coercing the number from a boolean ensures it is either 0 or 1
-          enabled: Number(!pixels[gridYPos * gridHeight + gridXPos]),
-          sequence: newSequence,
+          enabled: value,
+          seqnum: newLamportTimestamp,
         },
       },
       "pixel update"
