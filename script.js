@@ -3,25 +3,18 @@ var gridHeight = 30;
 
 let size = gridWidth * gridHeight;
 
-// lookups are very fast with Typed Arrays, making them a suitable structure
-// in case you want to implement a larger grid
-// Uint8 are the smallest available option
-// they are also conveniently initialized with zeros
+// lookups are very fast with Typed Arrays, also suitable for larger grids.
+// Uint8 are the smallest available option, conveniently initialized with zeros
 var pixels = new Uint8Array(size);
 
-// an implementation of Lamport Timestamps
+// 'pixelTimestamps' tracks the Lamport Timestamp for each pixel
+// to determine whether they happened before another, or if they are concurrent. 
 // (https://en.wikipedia.org/wiki/Lamport_timestamp)
-// lets us determine if one update is known to have
-// happened before another, or if they are concurrent
+// Uint32Array lets us track more than 4 Billion updates. 
+let pixelTimestamps = new Uint32Array(size);
 
-// 'recency' tracks the largest known sequence number for each pixel
-// at an offset corresponding to that of the 'pixels' array
-// a Uint32Array lets us track more than 4 Billion updates
-let recency = new Uint32Array(size);
-
-// this will be updated to the greatest Lamport timestamp
-// which we have observed,
-let mostRecentLogicalTime = 0;
+// highest Lamport timestamp which we have observed
+let maxLamportTimestamp = 0;
 
 function init() {
   function draw() {
@@ -69,10 +62,8 @@ function init() {
     oscillator.stop(context.currentTime + 0.1);
   }
 
-  function setPixel (offset, value, seqnum) {
-    // update recency:
-    recency[offset] = seqnum;
-    // and update the value
+  function setPixel (offset, value, lamportTimestamp) {
+    pixelTimestamps[offset] = lamportTimestamp;
     pixels[offset] = value;
   }
 
@@ -80,45 +71,30 @@ function init() {
     return y * gridHeight + x;
   }
 
-  function isPositiveInteger (n) {
-    return Number.isInteger(n) && n > 0;
-  }
-
   window.webxdc.setUpdateListener(function (update) {
     console.log(update);
     let {
       x,
       y,
-      seqnum,
       enabled,
+      lamportTimestamp,
     } = update.payload;
 
-    // incoming Lamport timestamps should always be positive integers.
-    // ignoring non-comforming updates makes that a guarantee.
-    if (!isPositiveInteger(seqnum)) { return; }
-
-    // we can afford not to validate other update values
-    // because TypedArrays restrict the possible values
-    // and out-of-bounds updates make no practical difference
-
-    // update the global timestamp if the incoming value is greater
-    mostRecentLogicalTime = Math.max(seqnum, mostRecentLogicalTime);
+    maxLamportTimestamp = Math.max(lamportTimestamp, maxLamportTimestamp);
 
     let offset = getOffset(x, y);
-    let currentPixelTime = recency[offset];
-    if (currentPixelTime < seqnum) {
-      // the update is newer than the currently set pixel value
-      // apply it and update its sequence number
-      setPixel(offset, enabled, seqnum);
-    } else if (currentPixelTime === seqnum) {
-      // if the incoming value has the same sequence number
-      // as the currently set value, then we consider them concurrent.
-      // ensure convergence with an arbitrary but deterministic tie-breaker
+    let pixelTimestamp = pixelTimestamps[offset];
+    if (pixelTimestamp < lamportTimestamp) {
+      // update is newer than the currently set pixel value
+      setPixel(offset, enabled, lamportTimestamp);
+    } else if (pixelTimestamp === lamportTimestamp) {
+      // the update was sent concurrently to our current pixel value.
+      // ensure convergence with an arbitrary but deterministic tie-breaker:
       // taking the larger of the two values is sufficient for integers
-      setPixel(offset, Math.max(pixels[offset], enabled), seqnum);
+      setPixel(offset, Math.max(pixels[offset], enabled), lamportTimestamp);
     } else {
-      // if the incoming update has a lower sequence number
-      // than the current state for this pixel, ignore it
+      // if the incoming update has a lower lamport Timestamp
+      // than the current one for this pixel, ignore it 
     }
 
     if (update.serial === update.max_serial) {
@@ -139,26 +115,27 @@ function init() {
     );
     var offset = getOffset(gridXPos, gridYPos);
 
-    // serializing updates as numbers is marginally more efficient than booleans.
     // coercing the number from a boolean ensures it is either 0 or 1
-    var value = Number(!pixels[offset]);
+    var newValue = Number(!pixels[offset]);
 
-    // when sending an update we include a sequence number
+    // when sending an update we use a Lamport timestamp 
     // that is one greater than the largest we have seen.
-    // this provides peers with enough information about our
-    // local state to interpret updates in a globally consistent way
-    let newLamportTimestamp = mostRecentLogicalTime = mostRecentLogicalTime + 1;
+    // allowing `setUpdateListener` to consistently resolve concurrent updates
+    maxLamportTimestamp = maxLamportTimestamp + 1;
+
     window.webxdc.sendUpdate(
       {
         payload: {
           x: gridXPos,
           y: gridYPos,
-          enabled: value,
-          seqnum: newLamportTimestamp,
+          enabled: newValue,
+          lamportTimestamp: maxLamportTimestamp,
         },
       },
       "pixel update"
     );
+    // sent updates are also received in a peer's own setUpdateListener
+    // which will actually set the pixel value 
   }
 
   canvas.addEventListener("mousedown", mouseDownHandler);
