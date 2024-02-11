@@ -62,22 +62,16 @@ function init() {
     oscillator.stop(context.currentTime + 0.1);
   }
 
-  function getOffset (x, y) {
-    return y * gridHeight + x;
-  }
-
   window.webxdc.setUpdateListener(function (update) {
     console.log(update);
     let {
-      x,
-      y,
-      enabled,
+      offset, 
+      value,
       lamportTimestamp,
     } = update.payload;
 
     maxLamportTimestamp = Math.max(lamportTimestamp, maxLamportTimestamp);
 
-    let offset = getOffset(x, y);
     let pixelTimestamp = pixelTimestamps[offset];
     if (pixelTimestamp < lamportTimestamp) {
       // update is newer than the currently set pixel value
@@ -87,7 +81,7 @@ function init() {
       // the update was sent concurrently to our current pixel value.
       // ensure convergence with an arbitrary but deterministic tie-breaker:
       // taking the larger of the two values is sufficient for integers
-      pixels[offset] = Math.max(pixels[offset], enabled);
+      pixels[offset] = Math.max(pixels[offset], value);
     } else {
       // if the incoming update has a lower lamport Timestamp
       // than the current one for this pixel, ignore it 
@@ -109,7 +103,7 @@ function init() {
     var gridYPos = Math.floor(
       ((event.clientY - rect.top) / rect.height) * gridHeight
     );
-    var offset = getOffset(gridXPos, gridYPos);
+    var offset = gridYPos * gridHeight + gridXPos;
 
     // coercing the number from a boolean ensures it is either 0 or 1
     var newValue = Number(!pixels[offset]);
@@ -122,9 +116,8 @@ function init() {
     window.webxdc.sendUpdate(
       {
         payload: {
-          x: gridXPos,
-          y: gridYPos,
-          enabled: newValue,
+          offset: offset, 
+          value: newValue,
           lamportTimestamp: maxLamportTimestamp,
         },
       },
