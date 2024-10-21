@@ -52,14 +52,17 @@ function init() {
     }
   }
 
+  let audioContext = null;
   function beep(freq) {
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
+    if (audioContext === null) {
+      audioContext = new AudioContext();
+    }
+    const oscillator = audioContext.createOscillator();
     oscillator.type = "square";
     oscillator.frequency.value = freq;
-    oscillator.connect(context.destination);
+    oscillator.connect(audioContext.destination);
     oscillator.start(); 
-    oscillator.stop(context.currentTime + 0.1);
+    oscillator.stop(audioContext.currentTime + 0.1);
   }
 
   window.webxdc.setUpdateListener(function (update) {
