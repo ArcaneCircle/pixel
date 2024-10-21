@@ -156,9 +156,9 @@ function init() {
     // which will actually set the pixel value
   }
 
-  canvas.addEventListener("mousedown", mouseDownHandler);
-  canvas.addEventListener("mousemove", mouseMoveHandler);
-  canvas.addEventListener("mouseup", mouseUpHandler);
+  canvas.addEventListener("pointerdown", mouseDownHandler);
+  canvas.addEventListener("pointermove", mouseMoveHandler);
+  canvas.addEventListener("pointerup", mouseUpHandler);
   draw();
 }
 
