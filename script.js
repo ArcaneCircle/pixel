@@ -162,7 +162,10 @@ function init() {
 
   // Make touch work on mobile phones.
   function touchMoveHandler(event) {
-    mouseMoveHandler(event.touches[0]);
+    if (event.touches.length == 1) {
+      mouseMoveHandler(event.touches[0]);
+      event.preventDefault();
+    }
   }
   canvas.addEventListener("touchmove", touchMoveHandler);
 
