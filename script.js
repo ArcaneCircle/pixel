@@ -111,10 +111,7 @@ function init() {
     var offset = gridYPos * gridHeight + gridXPos;
 
     // coercing the number from a boolean ensures it is either 0 or 1
-    var newValue = Number(!pixels[offset]);
-
-    // when sending an update we use a Lamport timestamp
-    mouseColor = newValue;
+    mouseColor = Number(!pixels[offset]);
 
     canvas.setPointerCapture(event.pointerId);
 
@@ -134,6 +131,7 @@ function init() {
     );
     var offset = gridYPos * gridHeight + gridXPos;
 
+    // when sending an update we use a Lamport timestamp
     // that is one greater than the largest we have seen
     // to allow `setUpdateListener` to consistently resolve concurrent updates
     maxLamportTimestamp = maxLamportTimestamp + 1;
