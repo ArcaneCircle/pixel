@@ -16,6 +16,9 @@ let pixelTimestamps = new Uint32Array(size);
 // highest Lamport timestamp which we have observed
 let maxLamportTimestamp = 0;
 
+let mouseIsDown = false;
+let mouseColor;
+
 function init() {
   function draw() {
     var canvas = document.getElementById("mycanvas");
@@ -112,6 +115,29 @@ function init() {
     var newValue = Number(!pixels[offset]);
 
     // when sending an update we use a Lamport timestamp
+    mouseIsDown = true;
+    mouseColor = newValue;
+
+    mouseMoveHandler(event);
+  }
+
+  function mouseUpHandler(event) {
+    mouseIsDown = false;
+  }
+
+  function mouseMoveHandler(event) {
+    if (!mouseIsDown) {
+      return;
+    }
+    var rect = canvas.getBoundingClientRect();
+    var gridXPos = Math.floor(
+      ((event.clientX - rect.left) / rect.width) * gridWidth,
+    );
+    var gridYPos = Math.floor(
+      ((event.clientY - rect.top) / rect.height) * gridHeight,
+    );
+    var offset = gridYPos * gridHeight + gridXPos;
+
     // that is one greater than the largest we have seen
     // to allow `setUpdateListener` to consistently resolve concurrent updates
     maxLamportTimestamp = maxLamportTimestamp + 1;
@@ -120,7 +146,7 @@ function init() {
       {
         payload: {
           offset: offset,
-          value: newValue,
+          value: mouseColor,
           lamportTimestamp: maxLamportTimestamp,
         },
       },
@@ -131,6 +157,8 @@ function init() {
   }
 
   canvas.addEventListener("mousedown", mouseDownHandler);
+  canvas.addEventListener("mousemove", mouseMoveHandler);
+  canvas.addEventListener("mouseup", mouseUpHandler);
   draw();
 }
 
