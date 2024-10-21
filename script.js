@@ -159,6 +159,13 @@ function init() {
   canvas.addEventListener("pointerdown", mouseDownHandler);
   canvas.addEventListener("pointermove", mouseMoveHandler);
   canvas.addEventListener("pointerup", mouseUpHandler);
+
+  // Make touch work on mobile phones.
+  function touchMoveHandler(event) {
+    mouseMoveHandler(event.touches[0]);
+  }
+  canvas.addEventListener("touchmove", touchMoveHandler);
+
   draw();
 }
 
