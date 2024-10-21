@@ -16,8 +16,7 @@ let pixelTimestamps = new Uint32Array(size);
 // highest Lamport timestamp which we have observed
 let maxLamportTimestamp = 0;
 
-let mouseIsDown = false;
-let mouseColor;
+let mouseColor = 1;
 
 function init() {
   function draw() {
@@ -115,7 +114,6 @@ function init() {
     var newValue = Number(!pixels[offset]);
 
     // when sending an update we use a Lamport timestamp
-    mouseIsDown = true;
     mouseColor = newValue;
 
     canvas.setPointerCapture(event.pointerId);
@@ -123,12 +121,8 @@ function init() {
     mouseMoveHandler(event);
   }
 
-  function mouseUpHandler(event) {
-    mouseIsDown = false;
-  }
-
   function mouseMoveHandler(event) {
-    if (!mouseIsDown) {
+    if (event.pressure === 0) {
       return;
     }
     var rect = canvas.getBoundingClientRect();
@@ -160,7 +154,6 @@ function init() {
 
   canvas.addEventListener("pointerdown", mouseDownHandler);
   canvas.addEventListener("pointermove", mouseMoveHandler);
-  canvas.addEventListener("pointerup", mouseUpHandler);
 
   // Make touch work on mobile phones.
   function touchMoveHandler(event) {
