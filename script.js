@@ -8,9 +8,9 @@ let size = gridWidth * gridHeight;
 var pixels = new Uint8Array(size);
 
 // 'pixelTimestamps' tracks the Lamport Timestamp for each pixel
-// to determine whether they happened before another, or if they are concurrent. 
+// to determine whether they happened before another, or if they are concurrent.
 // (https://en.wikipedia.org/wiki/Lamport_timestamp)
-// Uint32Array lets us track more than 4 Billion updates. 
+// Uint32Array lets us track more than 4 Billion updates.
 let pixelTimestamps = new Uint32Array(size);
 
 // highest Lamport timestamp which we have observed
@@ -61,14 +61,14 @@ function init() {
     oscillator.type = "square";
     oscillator.frequency.value = freq;
     oscillator.connect(audioContext.destination);
-    oscillator.start(); 
+    oscillator.start();
     oscillator.stop(audioContext.currentTime + 0.1);
   }
 
   window.webxdc.setUpdateListener(function (update) {
     console.log(update);
     let {
-      offset, 
+      offset,
       value,
       lamportTimestamp,
     } = update.payload;
@@ -87,7 +87,7 @@ function init() {
       pixels[offset] = Math.max(pixels[offset], value);
     } else {
       // if the incoming update has a lower lamport Timestamp
-      // than the current one for this pixel, ignore it 
+      // than the current one for this pixel, ignore it
     }
 
     if (update.serial === update.max_serial) {
@@ -101,17 +101,17 @@ function init() {
   function mouseDownHandler(event) {
     var rect = canvas.getBoundingClientRect();
     var gridXPos = Math.floor(
-      ((event.clientX - rect.left) / rect.width) * gridWidth
+      ((event.clientX - rect.left) / rect.width) * gridWidth,
     );
     var gridYPos = Math.floor(
-      ((event.clientY - rect.top) / rect.height) * gridHeight
+      ((event.clientY - rect.top) / rect.height) * gridHeight,
     );
     var offset = gridYPos * gridHeight + gridXPos;
 
     // coercing the number from a boolean ensures it is either 0 or 1
     var newValue = Number(!pixels[offset]);
 
-    // when sending an update we use a Lamport timestamp 
+    // when sending an update we use a Lamport timestamp
     // that is one greater than the largest we have seen
     // to allow `setUpdateListener` to consistently resolve concurrent updates
     maxLamportTimestamp = maxLamportTimestamp + 1;
@@ -119,15 +119,15 @@ function init() {
     window.webxdc.sendUpdate(
       {
         payload: {
-          offset: offset, 
+          offset: offset,
           value: newValue,
           lamportTimestamp: maxLamportTimestamp,
         },
       },
-      "pixel update"
+      "pixel update",
     );
     // sent updates are also received in a peer's own setUpdateListener
-    // which will actually set the pixel value 
+    // which will actually set the pixel value
   }
 
   canvas.addEventListener("mousedown", mouseDownHandler);
