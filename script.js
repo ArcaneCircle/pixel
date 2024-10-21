@@ -118,6 +118,8 @@ function init() {
     mouseIsDown = true;
     mouseColor = newValue;
 
+    canvas.setPointerCapture(event.pointerId);
+
     mouseMoveHandler(event);
   }
 
