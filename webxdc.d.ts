@@ -1,5 +1,8 @@
 //@ts-check
 
+// This file originates from
+// https://github.com/webxdc/webxdc_docs/blob/master/webxdc.d.ts
+
 type SendingStatusUpdate<T> = {
   /** the payload, deserialized json:
    * any javascript primitive, array or object. */
@@ -34,6 +37,55 @@ type ReceivedStatusUpdate<T> = {
   summary?: string;
 };
 
+type XDCFile =
+  & {
+    /** name of the file, including extension */
+    name: string;
+  }
+  & (
+    | {
+      /** Blob, also accepts inherit types like File */
+      blob: Blob;
+    }
+    | {
+      /** base64 encoded file data */
+      base64: string;
+    }
+    | {
+      /** text for textfile, will be encoded as utf8 */
+      plainText: string;
+    }
+  );
+
+type SendOptions =
+  | {
+    file: XDCFile;
+    text?: string;
+  }
+  | {
+    file?: XDCFile;
+    text: string;
+  };
+
+/**
+ * A listener for realtime data.
+ */
+export class RealtimeListener {
+  private listener: (data: Uint8Array) => void;
+  private trashed: boolean;
+
+  /* Whether the realtime channel was left */
+  is_trashed(): boolean;
+  /* Receive data from the realtime channel */
+  receive(data: Uint8Array): void;
+  /* Set a listener for the realtime channel */
+  setListener(listener: (data: Uint8Array) => void): void;
+  /* Send data over the realtime channel */
+  send(data: Uint8Array): void;
+  /* Leave the realtime channel */
+  leave(): void;
+}
+
 interface Webxdc<T> {
   /** Returns the peer's own address.
    *  This is esp. useful if you want to differ between different peers - just send the address along with the payload,
@@ -51,8 +103,14 @@ interface Webxdc<T> {
     cb: (statusUpdate: ReceivedStatusUpdate<T>) => void,
     serial?: number,
   ): Promise<void>;
+
   /**
-   * WARNING! This function is deprecated, see setUpdateListener().
+   * Join a realtime channel.
+   */
+  joinRealtimeChannel(): RealtimeListener;
+
+  /**
+   * @deprecated See {@link setUpdateListener|`setUpdateListener()`}.
    */
   getAllUpdates(): Promise<ReceivedStatusUpdate<T>[]>;
   /**
@@ -61,6 +119,33 @@ interface Webxdc<T> {
    * @param description short, human-readable description what this update is about. this is shown eg. as a fallback text in an email program.
    */
   sendUpdate(update: SendingStatusUpdate<T>, description: string): void;
+  /**
+   * Send a message with file, text or both to a chat.
+   * Asks user to what Chat to send the message to.
+   * May exit the xdc, please save your app state before calling this function.
+   * @param message
+   * @returns promise that may not resolve (because the xdc closes) and is rejected on error.
+   */
+  sendToChat(message: SendOptions): Promise<void>;
+  /**
+   * Asks the user to choose files.
+   * This either opens a normal file picker (like `<input type=file>`) or an integrated Filepicker if the ui has implemented it.
+   * This custom file picker should show files that were recently send or received in chats,
+   * but also show a button to open the normal file picker.
+   */
+  importFiles(filter: {
+    /**
+     * Only show files with these extensions.
+     * All extensions need to start with a dot and have the format `.ext`. */
+    extensions?: string[];
+    /**
+     * Mime types as in https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/accept#unique_file_type_specifiers
+     * Specifying a mime type requires to list all typical extensions as well.
+     */
+    mimeTypes?: string[];
+    /** Whether to allow multiple files to be selected, false by default */
+    multiple?: boolean;
+  }): Promise<File[]>;
 }
 
 ////////// ANCHOR: global
@@ -71,7 +156,7 @@ declare global {
 }
 ////////// ANCHOR_END: global
 
-export { ReceivedStatusUpdate, SendingStatusUpdate, Webxdc };
+export { ReceivedStatusUpdate, SendingStatusUpdate, Webxdc, XDCFile };
 
 /* Types for the Simulator */
 declare global {
