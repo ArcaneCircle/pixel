@@ -18,6 +18,13 @@ let maxLamportTimestamp = 0;
 
 let mouseColor = 1;
 
+// Set of pixels buffered for sending.
+// Element is zero if mouse has not crossed the pixel
+// since mouse was pressed, one otherwise.
+// Buffered pixels are sent out on mouse up,
+// but drawn immediately.
+const bufferedPixels = new Uint8Array(size);
+
 function init() {
   function draw() {
     var canvas = document.getElementById("mycanvas");
@@ -45,7 +52,9 @@ function init() {
 
     for (var i = 0; i < gridWidth; i++) {
       for (var j = 0; j < gridHeight; j++) {
-        if (pixels[j * gridHeight + i]) {
+        const offset = j * gridHeight + i;
+        const pixelColor = bufferedPixels[offset] ? mouseColor : pixels[offset];
+        if (pixelColor) {
           var x = (canvas.width / gridWidth) * i;
           var y = (canvas.height / gridHeight) * j;
           ctx.fillRect(x, y, pixelWidth, pixelHeight);
@@ -70,26 +79,28 @@ function init() {
   window.webxdc.setUpdateListener(function (update) {
     console.log(update);
     let {
-      offset,
+      offsets,
       value,
       lamportTimestamp,
     } = update.payload;
 
     maxLamportTimestamp = Math.max(lamportTimestamp, maxLamportTimestamp);
 
-    let pixelTimestamp = pixelTimestamps[offset];
-    if (pixelTimestamp < lamportTimestamp) {
-      // update is newer than the currently set pixel value
-      pixels[offset] = value;
-      pixelTimestamps[offset] = lamportTimestamp;
-    } else if (pixelTimestamp === lamportTimestamp) {
-      // the update was sent concurrently to our current pixel value.
-      // ensure convergence with an arbitrary but deterministic tie-breaker:
-      // taking the larger of the two values is sufficient for integers
-      pixels[offset] = Math.max(pixels[offset], value);
-    } else {
-      // if the incoming update has a lower lamport Timestamp
-      // than the current one for this pixel, ignore it
+    for (const offset of offsets) {
+      let pixelTimestamp = pixelTimestamps[offset];
+      if (pixelTimestamp < lamportTimestamp) {
+        // update is newer than the currently set pixel value
+        pixels[offset] = value;
+        pixelTimestamps[offset] = lamportTimestamp;
+      } else if (pixelTimestamp === lamportTimestamp) {
+        // the update was sent concurrently to our current pixel value.
+        // ensure convergence with an arbitrary but deterministic tie-breaker:
+        // taking the larger of the two values is sufficient for integers
+        pixels[offset] = Math.max(pixels[offset], value);
+      } else {
+        // if the incoming update has a lower lamport Timestamp
+        // than the current one for this pixel, ignore it
+      }
     }
 
     if (update.serial === update.max_serial) {
@@ -113,6 +124,8 @@ function init() {
     // coercing the number from a boolean ensures it is either 0 or 1
     mouseColor = Number(!pixels[offset]);
 
+    // Capture the pointer so we receive `pointerup` event
+    // even outside the canvas.
     canvas.setPointerCapture(event.pointerId);
 
     mouseMoveHandler(event);
@@ -130,16 +143,31 @@ function init() {
       ((event.clientY - rect.top) / rect.height) * gridHeight,
     );
     const offset = gridYPos * gridHeight + gridXPos;
+    bufferedPixels[offset] = 1;
+
+    draw();
+  }
+
+  function mouseUpHandler(event) {
+    // Send all the buffered changes outside.
 
     // when sending an update we use a Lamport timestamp
     // that is one greater than the largest we have seen
     // to allow `setUpdateListener` to consistently resolve concurrent updates
     maxLamportTimestamp = maxLamportTimestamp + 1;
 
+    let offsets = [];
+    for (let offset = 0; offset < size; offset++) {
+      if (bufferedPixels[offset]) {
+        offsets.push(offset);
+      }
+      bufferedPixels[offset] = 0;
+    }
+
     window.webxdc.sendUpdate(
       {
         payload: {
-          offset: offset,
+          offsets: offsets,
           value: mouseColor,
           lamportTimestamp: maxLamportTimestamp,
         },
@@ -152,6 +180,7 @@ function init() {
 
   canvas.addEventListener("pointerdown", mouseDownHandler);
   canvas.addEventListener("pointermove", mouseMoveHandler);
+  canvas.addEventListener("pointerup", mouseUpHandler);
 
   // Make touch work on mobile phones.
   function touchMoveHandler(event) {
