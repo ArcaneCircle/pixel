@@ -1,17 +1,17 @@
-var gridWidth = 30;
-var gridHeight = 30;
+const gridWidth = 30;
+const gridHeight = 30;
 
-let size = gridWidth * gridHeight;
+const size = gridWidth * gridHeight;
 
 // lookups are very fast with Typed Arrays, also suitable for larger grids.
 // Uint8 are the smallest available option, conveniently initialized with zeros
-var pixels = new Uint8Array(size);
+const pixels = new Uint8Array(size);
 
 // 'pixelTimestamps' tracks the Lamport Timestamp for each pixel
 // to determine whether they happened before another, or if they are concurrent.
 // (https://en.wikipedia.org/wiki/Lamport_timestamp)
 // Uint32Array lets us track more than 4 Billion updates.
-let pixelTimestamps = new Uint32Array(size);
+const pixelTimestamps = new Uint32Array(size);
 
 // highest Lamport timestamp which we have observed
 let maxLamportTimestamp = 0;
@@ -122,14 +122,14 @@ function init() {
     if (event.pressure === 0) {
       return;
     }
-    var rect = canvas.getBoundingClientRect();
-    var gridXPos = Math.floor(
+    const rect = canvas.getBoundingClientRect();
+    const gridXPos = Math.floor(
       ((event.clientX - rect.left) / rect.width) * gridWidth,
     );
-    var gridYPos = Math.floor(
+    const gridYPos = Math.floor(
       ((event.clientY - rect.top) / rect.height) * gridHeight,
     );
-    var offset = gridYPos * gridHeight + gridXPos;
+    const offset = gridYPos * gridHeight + gridXPos;
 
     // when sending an update we use a Lamport timestamp
     // that is one greater than the largest we have seen
