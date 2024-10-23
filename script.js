@@ -68,6 +68,23 @@ function init() {
     requestAnimationFrame(draw);
   }
 
+  function applyPixelUpdate(offset, value, lamportTimestamp) {
+    let pixelTimestamp = pixelTimestamps[offset];
+    if (pixelTimestamp < lamportTimestamp) {
+      // update is newer than the currently set pixel value
+      pixels[offset] = value;
+      pixelTimestamps[offset] = lamportTimestamp;
+    } else if (pixelTimestamp === lamportTimestamp) {
+      // the update was sent concurrently to our current pixel value.
+      // ensure convergence with an arbitrary but deterministic tie-breaker:
+      // taking the larger of the two values is sufficient for integers
+      pixels[offset] = Math.max(pixels[offset], value);
+    } else {
+      // if the incoming update has a lower lamport Timestamp
+      // than the current one for this pixel, ignore it
+    }
+  }
+
   let realtimeChannel;
   if (window.webxdc.joinRealtimeChannel !== undefined) {
     realtimeChannel = window.webxdc.joinRealtimeChannel();
@@ -76,13 +93,7 @@ function init() {
       const offset = view.getUint32(0);
       const lamportTimestamp = view.getUint32(4);
       const value = view.getUint8(8);
-      const pixelTimestamp = pixelTimestamps[offset];
-      if (pixelTimestamp < lamportTimestamp) {
-        pixels[offset] = value;
-        pixelTimestamps[offset] = lamportTimestamp;
-      } else if (pixelTimestamp === lamportTimestamp) {
-        pixels[offset] = Math.max(pixels[offset], value);
-      }
+      applyPixelUpdate(offset, value, lamportTimestamp);
     });
   }
 
@@ -110,20 +121,7 @@ function init() {
     maxLamportTimestamp = Math.max(lamportTimestamp, maxLamportTimestamp);
 
     for (const offset of offsets) {
-      let pixelTimestamp = pixelTimestamps[offset];
-      if (pixelTimestamp < lamportTimestamp) {
-        // update is newer than the currently set pixel value
-        pixels[offset] = value;
-        pixelTimestamps[offset] = lamportTimestamp;
-      } else if (pixelTimestamp === lamportTimestamp) {
-        // the update was sent concurrently to our current pixel value.
-        // ensure convergence with an arbitrary but deterministic tie-breaker:
-        // taking the larger of the two values is sufficient for integers
-        pixels[offset] = Math.max(pixels[offset], value);
-      } else {
-        // if the incoming update has a lower lamport Timestamp
-        // than the current one for this pixel, ignore it
-      }
+      applyPixelUpdate(offset, value, lamportTimestamp);
     }
 
     if (update.serial === update.max_serial) {
