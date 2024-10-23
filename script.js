@@ -74,9 +74,14 @@ function init() {
     realtimeChannel.setListener((data) => {
       const view = new DataView(data.buffer);
       const offset = view.getUint32(0);
-      const timestamp = view.getUint32(4);
-      if (timestamp === maxLamportTimestamp) {
-        pixels[offset] = 1;
+      const lamportTimestamp = view.getUint32(4);
+      const value = view.getUint8(8);
+      const pixelTimestamp = pixelTimestamps[offset];
+      if (pixelTimestamp < lamportTimestamp) {
+        pixels[offset] = value;
+        pixelTimestamps[offset] = lamportTimestamp;
+      } else if (pixelTimestamp === lamportTimestamp) {
+        pixels[offset] = Math.max(pixels[offset], value);
       }
     });
   }
@@ -161,16 +166,15 @@ function init() {
     );
     const offset = gridYPos * gridHeight + gridXPos;
     if (realtimeChannel !== undefined) {
-      if (mouseColor === 1) {
-        const data = new Uint8Array(8);
-        const view = new DataView(data.buffer);
-        view.setUint32(0, offset);
+      const data = new Uint8Array(9);
+      const view = new DataView(data.buffer);
+      view.setUint32(0, offset);
 
-        // We do not increase lamport timestamp for realtime updates,
-        // just notify the receiver what is our current observed timestamp.
-        view.setUint32(4, maxLamportTimestamp);
-        realtimeChannel.send(data);
-      }
+      maxLamportTimestamp = maxLamportTimestamp + 1;
+      view.setUint32(4, maxLamportTimestamp);
+
+      view.setUint8(8, mouseColor);
+      realtimeChannel.send(data);
     }
 
     bufferedPixels[offset] = 1;
