@@ -50,17 +50,35 @@ function init() {
 
     ctx.stroke();
 
+    const now = Date.now();
     for (var i = 0; i < gridWidth; i++) {
       for (var j = 0; j < gridHeight; j++) {
         const offset = j * gridHeight + i;
         const pixelColor = bufferedPixels[offset] ? mouseColor : pixels[offset];
+        const x = (canvas.width / gridWidth) * i;
+        const y = (canvas.height / gridHeight) * j;
+
         if (pixelColor) {
-          var x = (canvas.width / gridWidth) * i;
-          var y = (canvas.height / gridHeight) * j;
+          ctx.fillStyle = "black";
           ctx.fillRect(x, y, pixelWidth, pixelHeight);
         }
       }
     }
+
+    requestAnimationFrame(draw);
+  }
+
+  let realtimeChannel;
+  if (window.webxdc.joinRealtimeChannel !== undefined) {
+    realtimeChannel = window.webxdc.joinRealtimeChannel();
+    realtimeChannel.setListener((data) => {
+      const view = new DataView(data.buffer);
+      const offset = view.getUint32(0);
+      const timestamp = view.getUint32(4);
+      if (timestamp === maxLamportTimestamp) {
+        pixels[offset] = 1;
+      }
+    });
   }
 
   let audioContext = null;
@@ -104,7 +122,6 @@ function init() {
     }
 
     if (update.serial === update.max_serial) {
-      draw();
       beep(300);
     }
   });
@@ -143,9 +160,20 @@ function init() {
       ((event.clientY - rect.top) / rect.height) * gridHeight,
     );
     const offset = gridYPos * gridHeight + gridXPos;
-    bufferedPixels[offset] = 1;
+    if (realtimeChannel !== undefined) {
+      if (mouseColor === 1) {
+        const data = new Uint8Array(8);
+        const view = new DataView(data.buffer);
+        view.setUint32(0, offset);
 
-    draw();
+        // We do not increase lamport timestamp for realtime updates,
+        // just notify the receiver what is our current observed timestamp.
+        view.setUint32(4, maxLamportTimestamp);
+        realtimeChannel.send(data);
+      }
+    }
+
+    bufferedPixels[offset] = 1;
   }
 
   function mouseUpHandler(event) {
