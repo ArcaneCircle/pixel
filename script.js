@@ -188,6 +188,7 @@ function init() {
     for (let offset = 0; offset < size; offset++) {
       if (bufferedPixels[offset]) {
         offsets.push(offset);
+        pixels[offset] = mouseColor;
       }
       bufferedPixels[offset] = 0;
     }
