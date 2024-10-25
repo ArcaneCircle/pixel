@@ -1,18 +1,56 @@
-# Pixel editor
+# Color Pixel
 
-WebXDC editor for 1-bit pixel graphics.
+A collaborative pixel-art editor for Webxdc.
+Every user will draw using their profile color.
 
-This is a sample app demonstrating synchronization of pixel array using
-Last-Write-Wins conflict resolution.
+## Contributing
 
-Each participant can toggle pixels on and off, which results in sending an
-update for the pixel to other participants.
+### Installing Dependencies
 
-[Online-Demo](https://webxdc.codeberg.page/pixel/@main/)
+After cloning this repo, install dependecies:
 
-## Development
+```
+pnpm i
+```
 
-To run this WebXDC app in the emulator, simply open `index.html` in the browser.
+### Checking code format
 
-To create an `.xdc` file that can be sent into the chat, execute
-`./create-xdc.sh`.
+```
+pnpm check
+```
+
+### Testing the app in the browser
+
+To test your work in your browser (with hot reloading!) while developing:
+
+```
+pnpm start
+# Alternatively to test in a more advanced WebXDC emulator:
+pnpm emulator
+```
+
+### Building
+
+To package the WebXDC file:
+
+```
+pnpm build
+```
+
+To package the WebXDC with developer tools inside to debug in Delta Chat, set the `NODE_ENV`
+environment variable to "debug":
+
+```
+NODE_ENV=debug pnpm build
+```
+
+The resulting optimized `.xdc` file is saved in `dist-xdc/` folder.
+
+### Releasing
+
+To automatically build and create a new GitHub release with the `.xdc` file:
+
+```
+git tag -a v1.0.1
+git push origin v1.0.1
+```

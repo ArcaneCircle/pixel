@@ -1,3 +1,19 @@
+import {
+  createEncoder,
+  toUint8Array,
+  writeVarString,
+  writeVarUint,
+} from "lib0/encoding";
+import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
+import getRGB from "consistent-color-generation";
+import {
+  loadPixels,
+  loadPixelTimestamps,
+  loadMaxLamportTimestamp,
+  loadMaxSerial,
+  saveState,
+} from "./storage.js";
+
 const gridWidth = 30;
 const gridHeight = 30;
 
@@ -5,25 +21,29 @@ const size = gridWidth * gridHeight;
 
 // lookups are very fast with Typed Arrays, also suitable for larger grids.
 // Uint8 are the smallest available option, conveniently initialized with zeros
-const pixels = new Uint8Array(size);
+const pixels = loadPixels() || new Array(size);
 
 // 'pixelTimestamps' tracks the Lamport Timestamp for each pixel
 // to determine whether they happened before another, or if they are concurrent.
 // (https://en.wikipedia.org/wiki/Lamport_timestamp)
 // Uint32Array lets us track more than 4 Billion updates.
-const pixelTimestamps = new Uint32Array(size);
+const pixelTimestamps = loadPixelTimestamps() || new Uint32Array(size);
 
 // highest Lamport timestamp which we have observed
-let maxLamportTimestamp = 0;
+let maxLamportTimestamp = loadMaxLamportTimestamp();
 
-let mouseColor = 1;
+let initialized = false;
+
+const emptyPixel = "EMPTY";
+const selfColor = getRGB(window.webxdc.selfAddr).toString();
+let mouseColor = selfColor;
 
 // Set of pixels buffered for sending.
 // Element is zero if mouse has not crossed the pixel
 // since mouse was pressed, one otherwise.
 // Buffered pixels are sent out on mouse up,
 // but drawn immediately.
-const bufferedPixels = new Uint8Array(size);
+const bufferedPixels = new Array(size);
 
 function init() {
   function draw() {
@@ -54,12 +74,13 @@ function init() {
     for (var i = 0; i < gridWidth; i++) {
       for (var j = 0; j < gridHeight; j++) {
         const offset = j * gridHeight + i;
-        const pixelColor = bufferedPixels[offset] ? mouseColor : pixels[offset];
+        const pixelColor =
+          bufferedPixels[offset] || pixels[offset] || emptyPixel;
         const x = (canvas.width / gridWidth) * i;
         const y = (canvas.height / gridHeight) * j;
 
-        if (pixelColor) {
-          ctx.fillStyle = "black";
+        if (pixelColor !== emptyPixel) {
+          ctx.fillStyle = pixelColor;
           ctx.fillRect(x, y, pixelWidth, pixelHeight);
         }
       }
@@ -78,7 +99,7 @@ function init() {
       // the update was sent concurrently to our current pixel value.
       // ensure convergence with an arbitrary but deterministic tie-breaker:
       // taking the larger of the two values is sufficient for integers
-      pixels[offset] = Math.max(pixels[offset], value);
+      pixels[offset] = emptyPixel;
     } else {
       // if the incoming update has a lower lamport Timestamp
       // than the current one for this pixel, ignore it
@@ -89,10 +110,10 @@ function init() {
   if (window.webxdc.joinRealtimeChannel !== undefined) {
     realtimeChannel = window.webxdc.joinRealtimeChannel();
     realtimeChannel.setListener((data) => {
-      const view = new DataView(data.buffer);
-      const offset = view.getUint32(0);
-      const lamportTimestamp = view.getUint32(4);
-      const value = view.getUint8(8);
+      const decoder = createDecoder(data);
+      const offset = readVarUint(decoder);
+      const lamportTimestamp = readVarUint(decoder);
+      const value = readVarString(decoder);
       applyPixelUpdate(offset, value, lamportTimestamp);
     });
   }
@@ -110,24 +131,29 @@ function init() {
     oscillator.stop(audioContext.currentTime + 0.1);
   }
 
-  window.webxdc.setUpdateListener(function (update) {
-    console.log(update);
-    let {
-      offsets,
-      value,
-      lamportTimestamp,
-    } = update.payload;
+  window.webxdc
+    .setUpdateListener(function (update) {
+      let { offsets, value, lamportTimestamp } = update.payload;
 
-    maxLamportTimestamp = Math.max(lamportTimestamp, maxLamportTimestamp);
+      maxLamportTimestamp = Math.max(lamportTimestamp, maxLamportTimestamp);
 
-    for (const offset of offsets) {
-      applyPixelUpdate(offset, value, lamportTimestamp);
-    }
+      for (const offset of offsets) {
+        applyPixelUpdate(offset, value, lamportTimestamp);
+      }
 
-    if (update.serial === update.max_serial) {
-      beep(300);
-    }
-  });
+      if (update.serial === update.max_serial) {
+        if (initialized) {
+          beep(300);
+        }
+        saveState(
+          pixels,
+          pixelTimestamps,
+          maxLamportTimestamp,
+          update.max_serial,
+        );
+      }
+    }, loadMaxSerial())
+    .then(() => (initialized = true));
 
   var canvas = document.getElementById("mycanvas");
 
@@ -142,7 +168,7 @@ function init() {
     var offset = gridYPos * gridHeight + gridXPos;
 
     // coercing the number from a boolean ensures it is either 0 or 1
-    mouseColor = Number(!pixels[offset]);
+    mouseColor = pixels[offset] === selfColor ? emptyPixel : selfColor;
 
     // Capture the pointer so we receive `pointerup` event
     // even outside the canvas.
@@ -156,6 +182,14 @@ function init() {
       return;
     }
     const rect = canvas.getBoundingClientRect();
+    if (
+      event.clientX <= rect.left ||
+      event.clientX >= rect.right ||
+      event.clientY <= rect.top ||
+      event.clientY >= rect.bottom
+    ) {
+      return; // mouse out of the canvas boundaries
+    }
     const gridXPos = Math.floor(
       ((event.clientX - rect.left) / rect.width) * gridWidth,
     );
@@ -164,18 +198,14 @@ function init() {
     );
     const offset = gridYPos * gridHeight + gridXPos;
     if (realtimeChannel !== undefined) {
-      const data = new Uint8Array(9);
-      const view = new DataView(data.buffer);
-      view.setUint32(0, offset);
-
-      maxLamportTimestamp = maxLamportTimestamp + 1;
-      view.setUint32(4, maxLamportTimestamp);
-
-      view.setUint8(8, mouseColor);
-      realtimeChannel.send(data);
+      const encoder = createEncoder();
+      writeVarUint(encoder, offset);
+      writeVarUint(encoder, ++maxLamportTimestamp);
+      writeVarString(encoder, mouseColor);
+      realtimeChannel.send(toUint8Array(encoder));
     }
 
-    bufferedPixels[offset] = 1;
+    bufferedPixels[offset] = mouseColor;
   }
 
   function mouseUpHandler(event) {
@@ -184,15 +214,15 @@ function init() {
     // when sending an update we use a Lamport timestamp
     // that is one greater than the largest we have seen
     // to allow `setUpdateListener` to consistently resolve concurrent updates
-    maxLamportTimestamp = maxLamportTimestamp + 1;
+    maxLamportTimestamp++;
 
     let offsets = [];
     for (let offset = 0; offset < size; offset++) {
       if (bufferedPixels[offset]) {
         offsets.push(offset);
-        pixels[offset] = mouseColor;
+        pixels[offset] = bufferedPixels[offset];
       }
-      bufferedPixels[offset] = 0;
+      bufferedPixels[offset] = null;
     }
 
     window.webxdc.sendUpdate(
@@ -215,7 +245,7 @@ function init() {
 
   // Make touch work on mobile phones.
   function touchMoveHandler(event) {
-    if (event.touches.length == 1) {
+    if (event.touches.length === 1) {
       mouseMoveHandler(event.touches[0]);
       event.preventDefault();
     }
