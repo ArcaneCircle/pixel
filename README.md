@@ -1,6 +1,7 @@
 # Color Pixel
 
-![Logo](./public/icon.png)
+<img src="./public/icon.png" width="180px" alt="logo"/>
+
 
 A collaborative pixel-art editor for Webxdc.
 Every user will draw using their profile color.
