@@ -1,5 +1,7 @@
 # Color Pixel
 
+![Logo](./public/icon.png)
+
 A collaborative pixel-art editor for Webxdc.
 Every user will draw using their profile color.
 
